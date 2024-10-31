@@ -1,6 +1,38 @@
 @Dogshouseservice_HostAddress = http://localhost:5130
 
-GET {{Dogshouseservice_HostAddress}}/weatherforecast/
+GET {{Dogshouseservice_HostAddress}}/api/dog/ping/
 Accept: application/json
+
+###
+
+# GET request to get all dogs
+GET {{Dogshouseservice_HostAddress}}/api/dog
+Content-Type: application/json
+
+###
+
+# POST request to add Neo
+POST {{Dogshouseservice_HostAddress}}/api/dog
+Content-Type: application/json
+
+{
+  "name": "Neo",
+  "color": "red & amber",
+  "taillength": 22,
+  "weight": 32
+}
+
+###
+
+# POST request to add Jessy
+POST {{Dogshouseservice_HostAddress}}/api/dog
+Content-Type: application/json
+
+{
+  "name": "Jessy",
+  "color": "black & white",
+  "taillength": 7,
+  "weight": 14
+}
 
 ###
