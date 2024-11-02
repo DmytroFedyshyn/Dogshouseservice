@@ -7,6 +7,10 @@ using Dogshouseservice.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
 builder.Services.AddRateLimitingServices(builder.Configuration);
 
 builder.Services.AddControllers();
@@ -18,10 +22,7 @@ builder.Services.AddScoped<IDogService, DogService>();
 
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new() { Title = "Dogshouseservice", Version = "v1" });
-});
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 

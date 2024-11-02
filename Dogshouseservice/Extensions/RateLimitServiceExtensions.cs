@@ -15,7 +15,6 @@ namespace Dogshouseservice.Extensions
             services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
             services.AddSingleton<IProcessingStrategy, AsyncKeyLockProcessingStrategy>();
             services.AddHttpContextAccessor();
-            //services.AddInMemoryRateLimiting(); // Correct method to add in-memory rate limiting
 
             return services;
         }
