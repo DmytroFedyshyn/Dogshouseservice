@@ -48,7 +48,7 @@ namespace Dogshouseservice.Tests
         public async Task Dogs_ReturnsOkWithDogList()
         {
             // Arrange
-            var dogs = _fixture.CreateMany<Dog>(2).ToList(); // Convert to List<Dog> with ToList()
+            var dogs = _fixture.CreateMany<DogModel>(2).ToList(); // Convert to List<Dog> with ToList()
             _dogServiceMock.Setup(service => service.GetDogsAsync("name", "asc", 1, 10))
                 .ReturnsAsync(dogs); // Now returns List<Dog> without casting issues
 
@@ -57,7 +57,7 @@ namespace Dogshouseservice.Tests
 
             // Assert
             var okResult = Assert.IsType<OkObjectResult>(result); // Check if the result is of type OkObjectResult
-            var returnedDogs = Assert.IsType<List<Dog>>(okResult.Value); // Verify that the returned value is a list of dogs
+            var returnedDogs = Assert.IsType<List<DogModel>>(okResult.Value); // Verify that the returned value is a list of dogs
             Assert.Equal(2, returnedDogs.Count); // Ensure the count of returned dogs matches the expected count
         }
 
@@ -65,7 +65,7 @@ namespace Dogshouseservice.Tests
         public async Task Dog_ReturnsConflictIfDogExists()
         {
             // Arrange
-            var newDog = _fixture.Create<Dog>();
+            var newDog = _fixture.Create<DogModel>();
             _dogServiceMock.Setup(service => service.CreateDogAsync(newDog))
                 .ReturnsAsync(ResponseMessages.DogExists); // Mock a conflict scenario
 
@@ -81,7 +81,7 @@ namespace Dogshouseservice.Tests
         public async Task Dog_ReturnsBadRequestIfInvalidData()
         {
             // Arrange
-            var newDog = _fixture.Build<Dog>()
+            var newDog = _fixture.Build<DogModel>()
                 .With(d => d.TailLength, -1) // Invalid TailLength
                 .With(d => d.Weight, 0) // Invalid Weight
                 .Create();
@@ -101,7 +101,7 @@ namespace Dogshouseservice.Tests
         public async Task Dog_ReturnsCreatedAtActionIfSuccessful()
         {
             // Arrange
-            var newDog = _fixture.Create<Dog>();
+            var newDog = _fixture.Create<DogModel>();
             _dogServiceMock.Setup(service => service.CreateDogAsync(newDog))
                 .ReturnsAsync(string.Empty); // Mock a successful creation
 

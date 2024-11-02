@@ -8,6 +8,6 @@ namespace Dogshouseservice
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
 
-        public DbSet<Dog> Dogs { get; set; }
+        public DbSet<DogModel> Dogs { get; set; }
     }
 }

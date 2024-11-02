@@ -23,7 +23,7 @@ namespace Dogshouseservice.Services.Implementation
             return Task.FromResult(ResponseMessages.VersionMessage);
         }
 
-        public async Task<List<Dog>> GetDogsAsync(string attribute, string order, int pageNumber, int pageSize)
+        public async Task<List<DogModel>> GetDogsAsync(string attribute, string order, int pageNumber, int pageSize)
         {
             _logger.LogInformation("Fetching dogs from database with sorting attribute: {Attribute} and order: {Order}.", attribute, order);
 
@@ -44,7 +44,7 @@ namespace Dogshouseservice.Services.Implementation
             return result;
         }
 
-        public async Task<string> CreateDogAsync(Dog newDog)
+        public async Task<string> CreateDogAsync(DogModel newDog)
         {
             _logger.LogInformation("Checking if dog with name {DogName} exists.", newDog.Name);
 

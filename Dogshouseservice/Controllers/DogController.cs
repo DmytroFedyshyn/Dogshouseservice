@@ -37,7 +37,7 @@ namespace Dogshouseservice.Controllers
         }
 
         [HttpPost("dog")]
-        public async Task<IActionResult> Dog([FromBody] Dog newDog)
+        public async Task<IActionResult> Dog([FromBody] DogModel newDog)
         {
             _logger.LogInformation("Attempting to create a new dog: {DogName}", newDog.Name);
             var result = await _dogService.CreateDogAsync(newDog);

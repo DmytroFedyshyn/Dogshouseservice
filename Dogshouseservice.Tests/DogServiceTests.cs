@@ -57,7 +57,7 @@ namespace Dogshouseservice.Tests
         public async Task CreateDogAsync_AddsNewDog()
         {
             // Arrange
-            var newDog = _fixture.Create<Dog>();
+            var newDog = _fixture.Create<DogModel>();
 
             // Act
             var result = await _dogService.CreateDogAsync(newDog);
@@ -71,14 +71,14 @@ namespace Dogshouseservice.Tests
         public async Task CreateDogAsync_ReturnsDogExistsIfDogWithSameNameExists()
         {
             // Arrange
-            var existingDog = _fixture.Build<Dog>()
+            var existingDog = _fixture.Build<DogModel>()
                 .With(d => d.Name, "Buddy") // Use the name "Buddy" to create a duplicate
                 .Create();
 
             _context.Dogs.Add(existingDog);
             await _context.SaveChangesAsync();
 
-            var newDog = _fixture.Build<Dog>()
+            var newDog = _fixture.Build<DogModel>()
                 .With(d => d.Name, "Buddy") // Same "Buddy" name to check for existence validation
                 .Create();
 
@@ -93,7 +93,7 @@ namespace Dogshouseservice.Tests
         public async Task CreateDogAsync_ReturnsInvalidDogDataIfInvalidTailLengthOrWeight()
         {
             // Arrange
-            var invalidDog = _fixture.Build<Dog>()
+            var invalidDog = _fixture.Build<DogModel>()
                 .With(d => d.TailLength, -1) // Invalid TailLength
                 .With(d => d.Weight, 0) // Invalid Weight
                 .Create();
@@ -109,7 +109,7 @@ namespace Dogshouseservice.Tests
         public async Task GetDogsAsync_ReturnsSortedAndPagedDogs()
         {
             // Arrange
-            var dogs = _fixture.CreateMany<Dog>(5); // Generate 5 random dogs
+            var dogs = _fixture.CreateMany<DogModel>(5); // Generate 5 random dogs
             await _context.Dogs.AddRangeAsync(dogs);
             await _context.SaveChangesAsync();
 
