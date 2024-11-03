@@ -4,7 +4,6 @@ using Dogshouseservice.Constants;
 using Dogshouseservice.Helpers;
 using Dogshouseservice.Models;
 using Dogshouseservice.Services.Implementation;
-using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -16,10 +15,10 @@ namespace Dogshouseservice.Tests
     {
         private readonly Fixture _fixture;
         private readonly DogService _dogService;
-        private readonly Mock<IValidator<DogModel>> _dogValidatorMock;
         private readonly IMemoryCache _memoryCache;
         private readonly Mock<ILogger<DogService>> _loggerMock;
         private readonly ApplicationDbContext _context;
+        private readonly DogQueryValidator _dogQueryValidator;
 
         public DogServiceTests()
         {
@@ -32,10 +31,11 @@ namespace Dogshouseservice.Tests
             _context = new ApplicationDbContext(options);
 
             _memoryCache = new MemoryCache(new MemoryCacheOptions());
-            _dogValidatorMock = _fixture.Freeze<Mock<IValidator<DogModel>>>();
             _loggerMock = _fixture.Freeze<Mock<ILogger<DogService>>>();
 
-            _dogService = new DogService(_context, _memoryCache, _dogValidatorMock.Object, _loggerMock.Object);
+            _dogQueryValidator = new DogQueryValidator();
+
+            _dogService = new DogService(_context, _memoryCache, _dogQueryValidator, _loggerMock.Object);
         }
 
         public async Task InitializeAsync()
@@ -62,9 +62,6 @@ namespace Dogshouseservice.Tests
             // Arrange
             var dogs = _fixture.CreateMany<DogModel>(3).ToList();
 
-            _dogValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<DogModel>(), default))
-                .ReturnsAsync(new FluentValidation.Results.ValidationResult());
-
             foreach (var dog in dogs)
             {
                 await _dogService.CreateDogAsync(dog);
@@ -84,13 +81,7 @@ namespace Dogshouseservice.Tests
             // Arrange
             var newDog = _fixture.Create<DogModel>();
 
-            _dogValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<DogModel>(), default))
-                .ReturnsAsync(new FluentValidation.Results.ValidationResult());
-
             await _dogService.CreateDogAsync(newDog);
-
-            _dogValidatorMock.Setup(v => v.ValidateAsync(newDog, default))
-                .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
             // Act
             var result = await _dogService.CreateDogAsync(newDog);
@@ -108,11 +99,6 @@ namespace Dogshouseservice.Tests
                 .With(d => d.Weight, 0)
                 .Create();
 
-            _dogValidatorMock.Setup(v => v.ValidateAsync(newDog, default))
-                .ReturnsAsync(new FluentValidation.Results.ValidationResult(
-                    new[] { new FluentValidation.Results.ValidationFailure("TailLength", "Invalid tail length or weight.") }
-                ));
-
             // Act
             var result = await _dogService.CreateDogAsync(newDog);
 
@@ -125,8 +111,6 @@ namespace Dogshouseservice.Tests
         {
             // Arrange
             var newDog = _fixture.Create<DogModel>();
-            _dogValidatorMock.Setup(v => v.ValidateAsync(newDog, default))
-                .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
             // Act
             var result = await _dogService.CreateDogAsync(newDog);

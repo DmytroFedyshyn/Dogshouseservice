@@ -6,6 +6,8 @@ using AspNetCoreRateLimit;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Dogshouseservice.Extensions;
+using Dogshouseservice.Middleware;
+using Dogshouseservice.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +30,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<DogModelValidator>();
 
 builder.Services.AddScoped<IDogService, DogService>();
 builder.Services.AddScoped<DogModelValidator>();
+builder.Services.AddScoped<DogQueryValidator>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -39,6 +42,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseIpRateLimiting();
 

@@ -2,7 +2,6 @@
 using Dogshouseservice.Helpers;
 using Dogshouseservice.Models;
 using Dogshouseservice.Services.Interfaces;
-using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -12,74 +11,99 @@ namespace Dogshouseservice.Services.Implementation
     {
         private readonly ApplicationDbContext _context;
         private readonly IMemoryCache _cache;
-        private readonly IValidator<DogModel> _dogValidator;
+        private readonly DogQueryValidator _validator;
         private readonly ILogger<DogService> _logger;
 
-        public DogService(ApplicationDbContext context, IMemoryCache cache, IValidator<DogModel> dogValidator, ILogger<DogService> logger)
+        public DogService(ApplicationDbContext context, IMemoryCache cache, DogQueryValidator validator, ILogger<DogService> logger)
         {
             _context = context;
             _cache = cache;
-            _dogValidator = dogValidator;
+            _validator = validator;
             _logger = logger;
-        }
-
-        public string Ping()
-        {
-            _logger.LogInformation("Ping endpoint was called.");
-            return ResponseMessages.VersionMessage;
         }
 
         public async Task<List<DogModel>> GetDogsAsync(DogSortingAttribute attribute, string order, int pageNumber, int pageSize)
         {
-            string cacheKey = $"GetDogsAsync_{attribute}_{order}_{pageNumber}_{pageSize}";
-            _logger.LogInformation("Fetching dogs with cache key: {CacheKey}", cacheKey);
+            const string allDogsCacheKey = "AllDogsCache";
 
-            if (_cache.TryGetValue(cacheKey, out List<DogModel>? cachedDogs))
+            if (!_cache.TryGetValue(allDogsCacheKey, out List<DogModel>? allDogs))
             {
-                _logger.LogInformation("Cache hit for key: {CacheKey}", cacheKey);
-                return cachedDogs ?? new List<DogModel>();
+                _logger.LogInformation("Cache miss for all dogs list. Fetching from database.");
+                allDogs = await _context.Dogs.ToListAsync();
+                _cache.Set(allDogsCacheKey, allDogs, TimeSpan.FromMinutes(5));
+            }
+            else
+            {
+                _logger.LogInformation("Cache hit for all dogs list.");
             }
 
-            _logger.LogInformation("Cache miss for key: {CacheKey}. Retrieving data from the database.", cacheKey);
-            var dogs = await _context.Dogs.ToListAsync();
+            var sortedDogs = SortDogs(allDogs, attribute, order);
 
-            var comparer = new DogModelComparer(attribute, order);
-            dogs = dogs.OrderBy(d => d, comparer).ToList();
+            if (pageNumber > 0 && pageSize > 0)
+            {
+                var cacheKey = $"GetDogsAsync_{attribute}_{order}_{pageNumber}_{pageSize}";
+                if (!_cache.TryGetValue(cacheKey, out List<DogModel>? paginatedDogs))
+                {
+                    _logger.LogInformation("Cache miss for paginated dog list. Applying pagination.");
+                    paginatedDogs = sortedDogs.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+                    _cache.Set(cacheKey, paginatedDogs, TimeSpan.FromMinutes(5));
+                }
+                else
+                {
+                    _logger.LogInformation("Cache hit for paginated dog list.");
+                }
+                return paginatedDogs;
+            }
 
-            dogs = dogs.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+            return sortedDogs;
+        }
 
-            _logger.LogInformation("Caching result for key: {CacheKey}", cacheKey);
-            _cache.Set(cacheKey, dogs, TimeSpan.FromMinutes(5));
+        private List<DogModel> SortDogs(List<DogModel> dogs, DogSortingAttribute attribute, string order)
+        {
+            _logger.LogInformation($"Sorting dogs by {attribute} in {order} order.");
 
-            return dogs;
+            return attribute switch
+            {
+                DogSortingAttribute.Weight => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Weight).ToList() : dogs.OrderBy(d => d.Weight).ToList(),
+                DogSortingAttribute.TailLength => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.TailLength).ToList() : dogs.OrderBy(d => d.TailLength).ToList(),
+                _ => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Name).ToList() : dogs.OrderBy(d => d.Name).ToList(),
+            };
         }
 
         public async Task<string> CreateDogAsync(DogModel newDog)
         {
             _logger.LogInformation("Creating a new dog entry.");
 
-            var validationResult = await _dogValidator.ValidateAsync(newDog);
-            if (!validationResult.IsValid)
-            {
-                var errorMessage = validationResult.Errors.First().ErrorMessage;
-                _logger.LogWarning("Validation failed for new dog: {ErrorMessage}", errorMessage);
-                return errorMessage;
-            }
-
             if (_context.Dogs.Any(d => d.Name == newDog.Name))
             {
-                _logger.LogWarning("A dog with the name {DogName} already exists.", newDog.Name);
+                _logger.LogWarning("Duplicate dog entry detected: a dog with the same name already exists.");
                 return ResponseMessages.DogExists;
+            }
+
+            if (newDog.TailLength < 0 || newDog.Weight <= 0)
+            {
+                _logger.LogWarning("Invalid dog data: tail length or weight is incorrect.");
+                return ResponseMessages.InvalidDogData;
             }
 
             _context.Dogs.Add(newDog);
             await _context.SaveChangesAsync();
-            _logger.LogInformation("Dog with name {DogName} added successfully.", newDog.Name);
+            _logger.LogInformation("New dog entry created successfully.");
 
-            _logger.LogInformation("Clearing cache after creating a new dog entry.");
-            _cache.Remove("GetDogsAsync_cache_key");
+            const string allDogsCacheKey = "AllDogsCache";
+            _cache.Remove(allDogsCacheKey);
+
+            var allDogs = await _context.Dogs.ToListAsync();
+            _cache.Set(allDogsCacheKey, allDogs, TimeSpan.FromMinutes(5));
+            _logger.LogInformation("Cache updated for all dogs list after adding a new dog.");
 
             return string.Empty;
+        }
+
+
+        public string Ping()
+        {
+            return ResponseMessages.VersionMessage;
         }
     }
 }

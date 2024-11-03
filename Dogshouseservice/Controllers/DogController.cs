@@ -3,7 +3,6 @@ using Dogshouseservice.Helpers;
 using Dogshouseservice.Models;
 using Dogshouseservice.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace Dogshouseservice.Controllers
 {
