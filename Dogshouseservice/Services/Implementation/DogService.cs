@@ -34,6 +34,7 @@ namespace Dogshouseservice.Services.Implementation
 
             var baseCacheKey = $"GetDogs_{pageNumber}_{pageSize}";
 
+
             if (_cache.TryGetValue(baseCacheKey, out List<DogModel>? cachedDogs) && cachedDogs != null)
             {
                 _logger.LogInformation("Cache hit for base paginated dog list. Applying sorting in memory.");
@@ -74,25 +75,9 @@ namespace Dogshouseservice.Services.Implementation
             await _context.SaveChangesAsync();
             _logger.LogInformation("New dog entry created successfully.");
 
-            InvalidateAndRefreshCache();
+            InvalidateCache();
             return string.Empty;
         }
-
-        private void InvalidateAndRefreshCache()
-        {
-            _logger.LogInformation("Invalidating and refreshing all cache entries related to paginated dog lists.");
-
-            foreach (var key in _cacheKeys)
-            {
-                _cache.Remove(key);
-            }
-            _cacheKeys.Clear(); 
-            var firstPageDogs = _context.Dogs.Take(10).ToList();
-            var baseCacheKey = $"GetDogs_";
-            _cache.Set(baseCacheKey, firstPageDogs, TimeSpan.FromMinutes(5));
-            _cacheKeys.Add(baseCacheKey);
-        }
-
 
         private List<DogModel> ApplySorting(List<DogModel> dogs, DogSortingAttribute attribute, string order)
         {
@@ -103,6 +88,17 @@ namespace Dogshouseservice.Services.Implementation
                 DogSortingAttribute.TailLength => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.TailLength).ToList() : dogs.OrderBy(d => d.TailLength).ToList(),
                 _ => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Name).ToList() : dogs.OrderBy(d => d.Name).ToList(),
             };
+        }
+
+        private void InvalidateCache()
+        {
+            _logger.LogInformation("Invalidating all cache entries related to paginated dog lists.");
+
+            foreach (var key in _cacheKeys)
+            {
+                _cache.Remove(key);
+            }
+            _cacheKeys.Clear();
         }
 
         public string Ping()
