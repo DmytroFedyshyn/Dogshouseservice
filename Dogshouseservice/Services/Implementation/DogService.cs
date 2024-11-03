@@ -54,17 +54,6 @@ namespace Dogshouseservice.Services.Implementation
             return ApplySorting(paginatedDogs, attribute, order);
         }
 
-        private List<DogModel> ApplySorting(List<DogModel> dogs, DogSortingAttribute attribute, string order)
-        {
-            _logger.LogInformation($"Sorting cached dogs by {attribute} in {order} order.");
-            return attribute switch
-            {
-                DogSortingAttribute.Weight => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Weight).ToList() : dogs.OrderBy(d => d.Weight).ToList(),
-                DogSortingAttribute.TailLength => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.TailLength).ToList() : dogs.OrderBy(d => d.TailLength).ToList(),
-                _ => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Name).ToList() : dogs.OrderBy(d => d.Name).ToList(),
-            };
-        }
-
         public async Task<string> CreateDogAsync(DogModel newDog)
         {
             _logger.LogInformation("Creating a new dog entry.");
@@ -102,6 +91,18 @@ namespace Dogshouseservice.Services.Implementation
             var baseCacheKey = $"GetDogs_";
             _cache.Set(baseCacheKey, firstPageDogs, TimeSpan.FromMinutes(5));
             _cacheKeys.Add(baseCacheKey);
+        }
+
+
+        private List<DogModel> ApplySorting(List<DogModel> dogs, DogSortingAttribute attribute, string order)
+        {
+            _logger.LogInformation($"Sorting cached dogs by {attribute} in {order} order.");
+            return attribute switch
+            {
+                DogSortingAttribute.Weight => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Weight).ToList() : dogs.OrderBy(d => d.Weight).ToList(),
+                DogSortingAttribute.TailLength => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.TailLength).ToList() : dogs.OrderBy(d => d.TailLength).ToList(),
+                _ => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Name).ToList() : dogs.OrderBy(d => d.Name).ToList(),
+            };
         }
 
         public string Ping()
