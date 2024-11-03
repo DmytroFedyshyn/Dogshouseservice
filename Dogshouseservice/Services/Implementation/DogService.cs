@@ -13,6 +13,7 @@ namespace Dogshouseservice.Services.Implementation
         private readonly IMemoryCache _cache;
         private readonly DogQueryValidator _validator;
         private readonly ILogger<DogService> _logger;
+        private const string AllDogsCacheKey = "AllDogsCache";
 
         public DogService(ApplicationDbContext context, IMemoryCache cache, DogQueryValidator validator, ILogger<DogService> logger)
         {
@@ -24,50 +25,17 @@ namespace Dogshouseservice.Services.Implementation
 
         public async Task<List<DogModel>> GetDogsAsync(DogSortingAttribute attribute, string order, int pageNumber, int pageSize)
         {
-            const string allDogsCacheKey = "AllDogsCache";
+            var allDogs = await GetOrSetAllDogsCache();
 
-            if (!_cache.TryGetValue(allDogsCacheKey, out List<DogModel>? allDogs))
-            {
-                _logger.LogInformation("Cache miss for all dogs list. Fetching from database.");
-                allDogs = await _context.Dogs.ToListAsync();
-                _cache.Set(allDogsCacheKey, allDogs, TimeSpan.FromMinutes(5));
-            }
-            else
-            {
-                _logger.LogInformation("Cache hit for all dogs list.");
-            }
-
-            var sortedDogs = SortDogs(allDogs, attribute, order);
+            var sortedDogs = ApplySorting(allDogs, attribute, order);
 
             if (pageNumber > 0 && pageSize > 0)
             {
-                var cacheKey = $"GetDogsAsync_{attribute}_{order}_{pageNumber}_{pageSize}";
-                if (!_cache.TryGetValue(cacheKey, out List<DogModel>? paginatedDogs))
-                {
-                    _logger.LogInformation("Cache miss for paginated dog list. Applying pagination.");
-                    paginatedDogs = sortedDogs.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
-                    _cache.Set(cacheKey, paginatedDogs, TimeSpan.FromMinutes(5));
-                }
-                else
-                {
-                    _logger.LogInformation("Cache hit for paginated dog list.");
-                }
+                var paginatedDogs = ApplyPagination(sortedDogs, pageNumber, pageSize, attribute, order);
                 return paginatedDogs;
             }
 
             return sortedDogs;
-        }
-
-        private List<DogModel> SortDogs(List<DogModel> dogs, DogSortingAttribute attribute, string order)
-        {
-            _logger.LogInformation($"Sorting dogs by {attribute} in {order} order.");
-
-            return attribute switch
-            {
-                DogSortingAttribute.Weight => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Weight).ToList() : dogs.OrderBy(d => d.Weight).ToList(),
-                DogSortingAttribute.TailLength => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.TailLength).ToList() : dogs.OrderBy(d => d.TailLength).ToList(),
-                _ => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Name).ToList() : dogs.OrderBy(d => d.Name).ToList(),
-            };
         }
 
         public async Task<string> CreateDogAsync(DogModel newDog)
@@ -90,16 +58,58 @@ namespace Dogshouseservice.Services.Implementation
             await _context.SaveChangesAsync();
             _logger.LogInformation("New dog entry created successfully.");
 
-            const string allDogsCacheKey = "AllDogsCache";
-            _cache.Remove(allDogsCacheKey);
-
-            var allDogs = await _context.Dogs.ToListAsync();
-            _cache.Set(allDogsCacheKey, allDogs, TimeSpan.FromMinutes(5));
-            _logger.LogInformation("Cache updated for all dogs list after adding a new dog.");
-
+            InvalidateCache();
             return string.Empty;
         }
 
+        private async Task<List<DogModel>> GetOrSetAllDogsCache()
+        {
+            if (_cache.TryGetValue(AllDogsCacheKey, out List<DogModel>? allDogs) && allDogs != null)
+            {
+                _logger.LogInformation("Cache hit for all dogs list.");
+                return allDogs;
+            }
+
+            _logger.LogInformation("Cache miss for all dogs list. Fetching from database.");
+            allDogs = await _context.Dogs.ToListAsync();
+            _cache.Set(AllDogsCacheKey, allDogs, TimeSpan.FromMinutes(5));
+            return allDogs ?? [];
+        }
+
+        private List<DogModel> ApplySorting(List<DogModel> dogs, DogSortingAttribute attribute, string order)
+        {
+            _logger.LogInformation($"Sorting cached dogs by {attribute} in {order} order.");
+            return attribute switch
+            {
+                DogSortingAttribute.Weight => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Weight).ToList() : dogs.OrderBy(d => d.Weight).ToList(),
+                DogSortingAttribute.TailLength => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.TailLength).ToList() : dogs.OrderBy(d => d.TailLength).ToList(),
+                _ => order == SortingConstants.Descending ? dogs.OrderByDescending(d => d.Name).ToList() : dogs.OrderBy(d => d.Name).ToList(),
+            };
+        }
+
+        private List<DogModel> ApplyPagination(List<DogModel> sortedDogs, int pageNumber, int pageSize, DogSortingAttribute attribute, string order)
+        {
+            var cacheKey = $"PaginatedDogs_{attribute}_{order}_{pageNumber}_{pageSize}";
+
+            if (_cache.TryGetValue(cacheKey, out List<DogModel>? paginatedDogs) && paginatedDogs != null)
+            {
+                _logger.LogInformation("Cache hit for paginated dog list.");
+                return paginatedDogs;
+            }
+
+            _logger.LogInformation("Applying pagination to sorted dogs and caching result.");
+            paginatedDogs = sortedDogs.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+
+            _cache.Set(cacheKey, paginatedDogs, TimeSpan.FromMinutes(5));
+
+            return paginatedDogs ?? [];
+        }
+
+        private void InvalidateCache()
+        {
+            _cache.Remove(AllDogsCacheKey);
+            _logger.LogInformation("Cache cleared for all dogs list after adding a new dog.");
+        }
 
         public string Ping()
         {
