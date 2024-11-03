@@ -4,7 +4,6 @@ using Dogshouseservice.Models;
 using Dogshouseservice.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 
 namespace Dogshouseservice.Services.Implementation
 {
