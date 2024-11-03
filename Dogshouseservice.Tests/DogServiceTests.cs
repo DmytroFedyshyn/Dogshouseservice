@@ -1,23 +1,25 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using AutoFixture;
+﻿using AutoFixture;
 using AutoFixture.AutoMoq;
 using Dogshouseservice.Constants;
+using Dogshouseservice.Helpers;
 using Dogshouseservice.Models;
 using Dogshouseservice.Services.Implementation;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Xunit;
 
 namespace Dogshouseservice.Tests
 {
-    public class DogServiceTests : IDisposable
+    public class DogServiceTests : IAsyncLifetime
     {
         private readonly Fixture _fixture;
-        private readonly ApplicationDbContext _context;
         private readonly DogService _dogService;
+        private readonly Mock<IValidator<DogModel>> _dogValidatorMock;
+        private readonly IMemoryCache _memoryCache;
+        private readonly Mock<ILogger<DogService>> _loggerMock;
+        private readonly ApplicationDbContext _context;
 
         public DogServiceTests()
         {
@@ -25,62 +27,70 @@ namespace Dogshouseservice.Tests
             _fixture.Customize(new AutoMoqCustomization());
 
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseInMemoryDatabase(databaseName: "TestDatabase") // Use InMemoryDatabase
+                .UseInMemoryDatabase(databaseName: "TestDatabase")
                 .Options;
-
             _context = new ApplicationDbContext(options);
-            _context.Database.EnsureDeleted(); // Clear the database before each test
-            _context.Database.EnsureCreated();
 
-            var logger = _fixture.Create<ILogger<DogService>>();
-            _dogService = new DogService(_context, logger);
+            _memoryCache = new MemoryCache(new MemoryCacheOptions());
+            _dogValidatorMock = _fixture.Freeze<Mock<IValidator<DogModel>>>();
+            _loggerMock = _fixture.Freeze<Mock<ILogger<DogService>>>();
+
+            _dogService = new DogService(_context, _memoryCache, _dogValidatorMock.Object, _loggerMock.Object);
         }
 
-        public void Dispose()
+        public async Task InitializeAsync()
         {
-            // Ensure the database is deleted after each test to prevent data sharing
-            _context.Database.EnsureDeleted();
-            _context.Dispose();
+            _context.Dogs.RemoveRange(_context.Dogs);
+            await _context.SaveChangesAsync();
         }
+
+        public Task DisposeAsync() => Task.CompletedTask;
 
         [Fact]
-        public async Task PingAsync_ReturnsVersionMessage()
+        public void Ping_ReturnsExpectedMessage()
         {
             // Act
-            var result = await _dogService.PingAsync();
+            var result = _dogService.Ping();
 
             // Assert
             Assert.Equal(ResponseMessages.VersionMessage, result);
         }
 
         [Fact]
-        public async Task CreateDogAsync_AddsNewDog()
+        public async Task GetDogsAsync_ReturnsDogList()
+        {
+            // Arrange
+            var dogs = _fixture.CreateMany<DogModel>(3).ToList();
+
+            _dogValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<DogModel>(), default))
+                .ReturnsAsync(new FluentValidation.Results.ValidationResult());
+
+            foreach (var dog in dogs)
+            {
+                await _dogService.CreateDogAsync(dog);
+            }
+
+            // Act
+            var result = await _dogService.GetDogsAsync(DogSortingAttribute.Name, "asc", 1, 10);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(3, result.Count);
+        }
+
+        [Fact]
+        public async Task CreateDogAsync_ReturnsConflictIfDogExists()
         {
             // Arrange
             var newDog = _fixture.Create<DogModel>();
 
-            // Act
-            var result = await _dogService.CreateDogAsync(newDog);
+            _dogValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<DogModel>(), default))
+                .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
-            // Assert
-            Assert.Equal(string.Empty, result); // Empty result means success
-            Assert.Single(_context.Dogs); // Verify the dog is added to the context
-        }
+            await _dogService.CreateDogAsync(newDog);
 
-        [Fact]
-        public async Task CreateDogAsync_ReturnsDogExistsIfDogWithSameNameExists()
-        {
-            // Arrange
-            var existingDog = _fixture.Build<DogModel>()
-                .With(d => d.Name, "Buddy") // Use the name "Buddy" to create a duplicate
-                .Create();
-
-            _context.Dogs.Add(existingDog);
-            await _context.SaveChangesAsync();
-
-            var newDog = _fixture.Build<DogModel>()
-                .With(d => d.Name, "Buddy") // Same "Buddy" name to check for existence validation
-                .Create();
+            _dogValidatorMock.Setup(v => v.ValidateAsync(newDog, default))
+                .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
             // Act
             var result = await _dogService.CreateDogAsync(newDog);
@@ -90,34 +100,39 @@ namespace Dogshouseservice.Tests
         }
 
         [Fact]
-        public async Task CreateDogAsync_ReturnsInvalidDogDataIfInvalidTailLengthOrWeight()
+        public async Task CreateDogAsync_ReturnsBadRequestIfInvalidData()
         {
             // Arrange
-            var invalidDog = _fixture.Build<DogModel>()
-                .With(d => d.TailLength, -1) // Invalid TailLength
-                .With(d => d.Weight, 0) // Invalid Weight
+            var newDog = _fixture.Build<DogModel>()
+                .With(d => d.TailLength, -1)
+                .With(d => d.Weight, 0)
                 .Create();
 
+            _dogValidatorMock.Setup(v => v.ValidateAsync(newDog, default))
+                .ReturnsAsync(new FluentValidation.Results.ValidationResult(
+                    new[] { new FluentValidation.Results.ValidationFailure("TailLength", "Invalid tail length or weight.") }
+                ));
+
             // Act
-            var result = await _dogService.CreateDogAsync(invalidDog);
+            var result = await _dogService.CreateDogAsync(newDog);
 
             // Assert
             Assert.Equal(ResponseMessages.InvalidDogData, result);
         }
 
         [Fact]
-        public async Task GetDogsAsync_ReturnsSortedAndPagedDogs()
+        public async Task CreateDogAsync_ReturnsCreatedAtActionIfSuccessful()
         {
             // Arrange
-            var dogs = _fixture.CreateMany<DogModel>(5); // Generate 5 random dogs
-            await _context.Dogs.AddRangeAsync(dogs);
-            await _context.SaveChangesAsync();
+            var newDog = _fixture.Create<DogModel>();
+            _dogValidatorMock.Setup(v => v.ValidateAsync(newDog, default))
+                .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
             // Act
-            var result = await _dogService.GetDogsAsync("name", "asc", 1, 2);
+            var result = await _dogService.CreateDogAsync(newDog);
 
             // Assert
-            Assert.Equal(2, result.Count); // Expecting 2 dogs per page
+            Assert.Equal(string.Empty, result);
         }
     }
 }

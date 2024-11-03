@@ -1,15 +1,13 @@
-﻿using System.Collections.Generic;
-using System.Threading.Tasks;
-using AutoFixture;
+﻿using AutoFixture;
 using AutoFixture.AutoMoq;
 using Dogshouseservice.Constants;
 using Dogshouseservice.Controllers;
+using Dogshouseservice.Helpers;
 using Dogshouseservice.Models;
 using Dogshouseservice.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Xunit;
 
 namespace Dogshouseservice.Tests
 {
@@ -24,20 +22,20 @@ namespace Dogshouseservice.Tests
             _fixture = new Fixture();
             _fixture.Customize(new AutoMoqCustomization());
 
-            _dogServiceMock = _fixture.Freeze<Mock<IDogService>>(); // Freeze the mock to be shared in the fixture
-            var logger = _fixture.Create<ILogger<DogController>>(); // Create a mock logger for the controller
-            _dogController = new DogController(_dogServiceMock.Object, logger); // Inject the mock service and logger into the controller
+            _dogServiceMock = _fixture.Freeze<Mock<IDogService>>();
+            var logger = _fixture.Create<ILogger<DogController>>();
+            _dogController = new DogController(_dogServiceMock.Object, logger);
         }
 
         [Fact]
-        public async Task Ping_ReturnsOkWithMessage()
+        public void Ping_ReturnsOkWithMessage()
         {
             // Arrange
-            _dogServiceMock.Setup(service => service.PingAsync())
-                .ReturnsAsync(ResponseMessages.VersionMessage);
+            _dogServiceMock.Setup(service => service.Ping())
+                .Returns(ResponseMessages.VersionMessage);
 
             // Act
-            var result = await _dogController.Ping();
+            var result = _dogController.Ping();
 
             // Assert
             var okResult = Assert.IsType<OkObjectResult>(result);
@@ -48,17 +46,17 @@ namespace Dogshouseservice.Tests
         public async Task Dogs_ReturnsOkWithDogList()
         {
             // Arrange
-            var dogs = _fixture.CreateMany<DogModel>(2).ToList(); // Convert to List<Dog> with ToList()
-            _dogServiceMock.Setup(service => service.GetDogsAsync("name", "asc", 1, 10))
-                .ReturnsAsync(dogs); // Now returns List<Dog> without casting issues
+            var dogs = _fixture.CreateMany<DogModel>(2).ToList();
+            _dogServiceMock.Setup(service => service.GetDogsAsync(DogSortingAttribute.Name, "asc", 1, 10))
+                .ReturnsAsync(dogs);
 
             // Act
             var result = await _dogController.Dogs();
 
             // Assert
-            var okResult = Assert.IsType<OkObjectResult>(result); // Check if the result is of type OkObjectResult
-            var returnedDogs = Assert.IsType<List<DogModel>>(okResult.Value); // Verify that the returned value is a list of dogs
-            Assert.Equal(2, returnedDogs.Count); // Ensure the count of returned dogs matches the expected count
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var returnedDogs = Assert.IsType<List<DogModel>>(okResult.Value);
+            Assert.Equal(2, returnedDogs.Count);
         }
 
         [Fact]
@@ -67,13 +65,13 @@ namespace Dogshouseservice.Tests
             // Arrange
             var newDog = _fixture.Create<DogModel>();
             _dogServiceMock.Setup(service => service.CreateDogAsync(newDog))
-                .ReturnsAsync(ResponseMessages.DogExists); // Mock a conflict scenario
+                .ReturnsAsync(ResponseMessages.DogExists);
 
             // Act
             var result = await _dogController.Dog(newDog);
 
             // Assert
-            var conflictResult = Assert.IsType<ConflictObjectResult>(result); // Check for Conflict response
+            var conflictResult = Assert.IsType<ConflictObjectResult>(result);
             Assert.Equal(ResponseMessages.DogExists, conflictResult.Value);
         }
 
@@ -82,18 +80,18 @@ namespace Dogshouseservice.Tests
         {
             // Arrange
             var newDog = _fixture.Build<DogModel>()
-                .With(d => d.TailLength, -1) // Invalid TailLength
-                .With(d => d.Weight, 0) // Invalid Weight
+                .With(d => d.TailLength, -1)
+                .With(d => d.Weight, 0)
                 .Create();
 
             _dogServiceMock.Setup(service => service.CreateDogAsync(newDog))
-                .ReturnsAsync(ResponseMessages.InvalidDogData); // Mock invalid data scenario
+                .ReturnsAsync(ResponseMessages.InvalidDogData);
 
             // Act
             var result = await _dogController.Dog(newDog);
 
             // Assert
-            var badRequestResult = Assert.IsType<BadRequestObjectResult>(result); // Check for BadRequest response
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
             Assert.Equal(ResponseMessages.InvalidDogData, badRequestResult.Value);
         }
 
@@ -103,15 +101,15 @@ namespace Dogshouseservice.Tests
             // Arrange
             var newDog = _fixture.Create<DogModel>();
             _dogServiceMock.Setup(service => service.CreateDogAsync(newDog))
-                .ReturnsAsync(string.Empty); // Mock a successful creation
+                .ReturnsAsync(string.Empty);
 
             // Act
             var result = await _dogController.Dog(newDog);
 
             // Assert
-            var createdAtActionResult = Assert.IsType<CreatedAtActionResult>(result); // Check for CreatedAtAction response
-            Assert.Equal(nameof(DogController.Dogs), createdAtActionResult.ActionName); // Verify the correct action name
-            Assert.Equal(newDog, createdAtActionResult.Value); // Ensure the created dog matches the expected dog
+            var createdAtActionResult = Assert.IsType<CreatedAtActionResult>(result);
+            Assert.Equal(nameof(DogController.Dogs), createdAtActionResult.ActionName);
+            Assert.Equal(newDog, createdAtActionResult.Value);
         }
     }
 }

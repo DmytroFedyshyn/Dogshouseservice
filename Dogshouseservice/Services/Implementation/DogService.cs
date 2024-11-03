@@ -1,69 +1,85 @@
 ﻿using Dogshouseservice.Constants;
+using Dogshouseservice.Helpers;
 using Dogshouseservice.Models;
 using Dogshouseservice.Services.Interfaces;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Dogshouseservice.Services.Implementation
 {
     public class DogService : IDogService
     {
         private readonly ApplicationDbContext _context;
+        private readonly IMemoryCache _cache;
+        private readonly IValidator<DogModel> _dogValidator;
         private readonly ILogger<DogService> _logger;
 
-        public DogService(ApplicationDbContext context, ILogger<DogService> logger)
+        public DogService(ApplicationDbContext context, IMemoryCache cache, IValidator<DogModel> dogValidator, ILogger<DogService> logger)
         {
             _context = context;
+            _cache = cache;
+            _dogValidator = dogValidator;
             _logger = logger;
         }
 
-        public Task<string> PingAsync()
+        public string Ping()
         {
-            _logger.LogInformation("Returning version message for Ping.");
-            return Task.FromResult(ResponseMessages.VersionMessage);
+            _logger.LogInformation("Ping endpoint was called.");
+            return ResponseMessages.VersionMessage;
         }
 
-        public async Task<List<DogModel>> GetDogsAsync(string attribute, string order, int pageNumber, int pageSize)
+        public async Task<List<DogModel>> GetDogsAsync(DogSortingAttribute attribute, string order, int pageNumber, int pageSize)
         {
-            _logger.LogInformation("Fetching dogs from database with sorting attribute: {Attribute} and order: {Order}.", attribute, order);
+            string cacheKey = $"GetDogsAsync_{attribute}_{order}_{pageNumber}_{pageSize}";
+            _logger.LogInformation("Fetching dogs with cache key: {CacheKey}", cacheKey);
 
-            var dogsQuery = _context.Dogs.AsQueryable();
-
-            // Sorting logic
-            dogsQuery = attribute.ToLower() switch
+            if (_cache.TryGetValue(cacheKey, out List<DogModel>? cachedDogs))
             {
-                "weight" => order == "desc" ? dogsQuery.OrderByDescending(d => d.Weight) : dogsQuery.OrderBy(d => d.Weight),
-                "tail_length" => order == "desc" ? dogsQuery.OrderByDescending(d => d.TailLength) : dogsQuery.OrderBy(d => d.TailLength),
-                _ => order == "desc" ? dogsQuery.OrderByDescending(d => d.Name) : dogsQuery.OrderBy(d => d.Name),
-            };
+                _logger.LogInformation("Cache hit for key: {CacheKey}", cacheKey);
+                return cachedDogs ?? new List<DogModel>();
+            }
 
-            // Pagination logic
-            var result = await dogsQuery.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync();
+            _logger.LogInformation("Cache miss for key: {CacheKey}. Retrieving data from the database.", cacheKey);
+            var dogs = await _context.Dogs.ToListAsync();
 
-            _logger.LogInformation("Fetched {Count} dogs from database.", result.Count);
-            return result;
+            var comparer = new DogModelComparer(attribute, order);
+            dogs = dogs.OrderBy(d => d, comparer).ToList();
+
+            dogs = dogs.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+
+            _logger.LogInformation("Caching result for key: {CacheKey}", cacheKey);
+            _cache.Set(cacheKey, dogs, TimeSpan.FromMinutes(5));
+
+            return dogs;
         }
 
         public async Task<string> CreateDogAsync(DogModel newDog)
         {
-            _logger.LogInformation("Checking if dog with name {DogName} exists.", newDog.Name);
+            _logger.LogInformation("Creating a new dog entry.");
+
+            var validationResult = await _dogValidator.ValidateAsync(newDog);
+            if (!validationResult.IsValid)
+            {
+                var errorMessage = validationResult.Errors.First().ErrorMessage;
+                _logger.LogWarning("Validation failed for new dog: {ErrorMessage}", errorMessage);
+                return errorMessage;
+            }
 
             if (_context.Dogs.Any(d => d.Name == newDog.Name))
             {
-                _logger.LogWarning("Dog with name {DogName} already exists in the database.", newDog.Name);
+                _logger.LogWarning("A dog with the name {DogName} already exists.", newDog.Name);
                 return ResponseMessages.DogExists;
-            }
-
-            if (newDog.TailLength < 0 || newDog.Weight <= 0)
-            {
-                _logger.LogWarning("Invalid data for dog: {DogName}. TailLength: {TailLength}, Weight: {Weight}", newDog.Name, newDog.TailLength, newDog.Weight);
-                return ResponseMessages.InvalidDogData;
             }
 
             _context.Dogs.Add(newDog);
             await _context.SaveChangesAsync();
-            _logger.LogInformation("Dog {DogName} added to the database successfully.", newDog.Name);
-            return string.Empty; // Empty string indicates successful creation
+            _logger.LogInformation("Dog with name {DogName} added successfully.", newDog.Name);
+
+            _logger.LogInformation("Clearing cache after creating a new dog entry.");
+            _cache.Remove("GetDogsAsync_cache_key");
+
+            return string.Empty;
         }
     }
 }

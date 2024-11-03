@@ -1,6 +1,4 @@
 ﻿using AspNetCoreRateLimit;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Dogshouseservice.Extensions
 {

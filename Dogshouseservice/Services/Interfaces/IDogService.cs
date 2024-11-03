@@ -1,11 +1,12 @@
-﻿using Dogshouseservice.Models;
+﻿using Dogshouseservice.Helpers;
+using Dogshouseservice.Models;
 
 namespace Dogshouseservice.Services.Interfaces
 {
     public interface IDogService
     {
-        Task<string> PingAsync();
-        Task<List<DogModel>> GetDogsAsync(string attribute, string order, int pageNumber, int pageSize);
+        public string Ping();
+        Task<List<DogModel>> GetDogsAsync(DogSortingAttribute attribute, string order, int pageNumber, int pageSize);
         Task<string> CreateDogAsync(DogModel newDog);
     }
 }
