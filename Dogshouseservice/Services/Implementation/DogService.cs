@@ -34,15 +34,13 @@ namespace Dogshouseservice.Services.Implementation
 
             var baseCacheKey = $"GetDogs_{pageNumber}_{pageSize}";
 
-
             if (_cache.TryGetValue(baseCacheKey, out List<DogModel>? cachedDogs) && cachedDogs != null)
             {
-                _logger.LogInformation("Cache hit for base paginated dog list. Applying sorting in memory.");
+                _logger.LogInformation("Cache hit for paginated dog list. Sorting data in memory.");
                 return ApplySorting(cachedDogs, attribute, order);
             }
 
-            _logger.LogInformation("Cache miss for base paginated dog list. Fetching from database.");
-
+            _logger.LogInformation("Cache miss for paginated dog list. Fetching from database.");
             var query = _context.Dogs.AsQueryable();
             var paginatedDogs = await query
                 .Skip((pageNumber - 1) * pageSize)
@@ -59,7 +57,7 @@ namespace Dogshouseservice.Services.Implementation
         {
             _logger.LogInformation("Creating a new dog entry.");
 
-            if (_context.Dogs.Any(d => d.Name == newDog.Name))
+            if (await _context.Dogs.AnyAsync(d => d.Name == newDog.Name))
             {
                 _logger.LogWarning("Duplicate dog entry detected: a dog with the same name already exists.");
                 return ResponseMessages.DogExists;
@@ -71,7 +69,7 @@ namespace Dogshouseservice.Services.Implementation
                 return ResponseMessages.InvalidDogData;
             }
 
-            _context.Dogs.Add(newDog);
+            await _context.Dogs.AddAsync(newDog);
             await _context.SaveChangesAsync();
             _logger.LogInformation("New dog entry created successfully.");
 
@@ -93,7 +91,6 @@ namespace Dogshouseservice.Services.Implementation
         private void InvalidateCache()
         {
             _logger.LogInformation("Invalidating all cache entries related to paginated dog lists.");
-
             foreach (var key in _cacheKeys)
             {
                 _cache.Remove(key);
