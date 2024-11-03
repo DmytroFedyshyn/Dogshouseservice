@@ -15,7 +15,7 @@ namespace Dogshouseservice.Tests
     {
         private readonly Fixture _fixture;
         private readonly DogService _dogService;
-        private readonly MemoryCache _memoryCache;
+        private readonly IMemoryCache _memoryCache;
         private readonly Mock<ILogger<DogService>> _loggerMock;
         private readonly ApplicationDbContext _context;
         private readonly DogQueryValidator _dogQueryValidator;

@@ -4,19 +4,20 @@ using Dogshouseservice.Models;
 using Dogshouseservice.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace Dogshouseservice.Services.Implementation
 {
     public class DogService : IDogService
     {
         private readonly ApplicationDbContext _context;
-        private readonly MemoryCache _cache;
+        private readonly IMemoryCache _cache;
         private readonly DogQueryValidator _validator;
         private readonly ILogger<DogService> _logger;
 
         private const string AllDogsCacheKeyPrefix = "GetDogs";
 
-        public DogService(ApplicationDbContext context, MemoryCache cache, DogQueryValidator validator, ILogger<DogService> logger)
+        public DogService(ApplicationDbContext context, IMemoryCache cache, DogQueryValidator validator, ILogger<DogService> logger)
         {
             _context = context;
             _cache = cache;
@@ -93,7 +94,10 @@ namespace Dogshouseservice.Services.Implementation
         private void InvalidateAllCache()
         {
             _logger.LogInformation("Clearing all cache entries.");
-            _cache.Compact(1.0);
+            if (_cache is MemoryCache memoryCache)
+            {
+                memoryCache.Compact(1.0);
+            }
         }
     }
 }
